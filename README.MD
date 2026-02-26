@@ -10,7 +10,9 @@ A fake maximize implementation for [Hyprland](https://hyprland.org/) that avoids
 
 When using Hyprland as a floating WM, the native `fullscreen, 1` (maximize) state causes a z-order bug: opening a new window in front of a maximized window and then switching back leaves a ghost window that appears on screen but cannot receive input. This is only resolved by un-maximizing the window.
 
-`hyprmax` solves this by simulating maximize through repositioning and resizing the window to fill the screen — without ever entering the native fullscreen state.
+`hyprmax` solves this by simulating maximize through repositioning and resizing the window to fill the screen.
+
+---
 
 ## Features
 
@@ -63,6 +65,8 @@ A native Hyprland plugin is planned and will be available once multi-distro buil
 hyprpm add https://github.com/hashylog/hyprmax
 hyprpm enable hyprmax
 ```
+
+---
 
 ## Known Issues / Limitations
 
