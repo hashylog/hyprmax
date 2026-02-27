@@ -15,6 +15,9 @@ endif
 globber = run_command('find', 'src', '-name', '*.cpp', check: true)
 src = globber.stdout().strip().split('\n')
 
+home_dir = run_command('sh', '-c', 'echo $HOME', check: true).stdout().strip()
+plugin_dir = home_dir / '.config' / 'hypr' / 'plugins'
+
 shared_module(meson.project_name(), src,
   dependencies: [
     dependency('hyprland'),
@@ -27,4 +30,5 @@ shared_module(meson.project_name(), src,
     dependency('xkbcommon'),
   ],
   install: true,
+  install_dir: plugin_dir,
 )
