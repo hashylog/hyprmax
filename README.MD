@@ -1,8 +1,6 @@
 # hyprmax
 
-A fake maximize implementation for [Hyprland](https://hyprland.org/) that avoids the native fullscreen/maximize state, which causes z-order bugs in floating WM setups.
-
-> **Plugin version coming soon.** For now, the script installation is the recommended method.
+A native Hyprland plugin that implements fake maximize for floating WM setups, avoiding the z-order bugs caused by the native fullscreen/maximize state.
 
 ---
 
@@ -16,61 +14,99 @@ When using Hyprland as a floating WM, the native `fullscreen, 1` (maximize) stat
 
 ## Features
 
-- Fake maximize that respects `gaps_out` and reserved areas (e.g. Waybar)
+- Native C++ plugin — no external dependencies (no `bash`, `jq`, or shell scripts)
+- Fake maximize that reads `general:gaps_out` directly from your config (supports CSS-style gaps)
+- Respects reserved areas automatically (Waybar, panels, etc.)
 - Restores the original window geometry on toggle
-- Tiled windows are automatically converted to floating when maximized, and restore their previous floating geometry on unmaximize
+- Tiled windows are converted to floating when triggered (tiled already behaves like maximized)
+- Tags windows with `hyprmax` for use in window rules
+- In-memory state with automatic cleanup on window close
 - Works with any window switcher (Rofi, Hyprshell, etc.)
+- Compatible with all systems that Hyprland supports
 
 ---
 
 ## Installation
 
-### Script (recommended)
+### Plugin (recommended)
+
+```bash
+hyprpm add https://github.com/hashylog/hyprmax
+hyprpm enable hyprmax
+```
+
+Add to your `hyprland.conf`:
+
+```ini
+# Load plugin on startup
+exec-once = hyprpm reload
+
+# Keybind
+bind = $mainMod, F, hyprmax,
+```
+
+To update:
+
+```bash
+hyprpm update
+```
+
+### Manual build
+
+**Requirements:** C++ compiler with C++23 support, `meson`, `ninja`, Hyprland development headers
+
+```bash
+git clone https://github.com/hashylog/hyprmax
+cd hyprmax
+meson setup build --buildtype=release
+ninja -C build
+```
+
+Load manually:
+
+```bash
+hyprctl plugin load /absolute/path/to/hyprmax/build/libhyprmax.so
+```
+
+### Script (legacy)
+
+The original shell script is still available in `scripts/hyprmax.sh` but is no longer recommended. The plugin is faster, has no external dependencies, and reads your config automatically.
+
+<details>
+<summary>Script installation</summary>
 
 **Dependencies:** `bash`, `jq`, `hyprctl`
 
 ```bash
-# Install jq if you don't have it
-# Arch: sudo pacman -S jq
-# Debian/Ubuntu: sudo apt install jq
-
-# Clone the repository
-git clone https://github.com/hashylog/hyprmax
-cd hyprmax
-
-# Copy the script
 mkdir -p ~/.config/hypr/scripts
 cp scripts/hyprmax.sh ~/.config/hypr/scripts/
 chmod +x ~/.config/hypr/scripts/hyprmax.sh
 ```
 
-Then add the keybind to your `hyprland.conf`:
-
 ```ini
 bind = $mainMod, F, exec, ~/.config/hypr/scripts/hyprmax.sh
 ```
 
-Reload Hyprland:
+**Note:** The script has `GAPS_OUT` hardcoded to `20`. Edit the script if you use a different value.
 
-```bash
-hyprctl reload
-```
-
-### Plugin (coming soon)
-
-A native Hyprland plugin is planned and will be available once multi-distro build support is implemented. It will be installable via `hyprpm`:
-
-```bash
-# Not available yet
-hyprpm add https://github.com/hashylog/hyprmax
-hyprpm enable hyprmax
-```
+</details>
 
 ---
 
-## Known Issues / Limitations
+## How It Works
 
-- **`GAPS_OUT` is hardcoded** to `20` in the script. If you use a different value in your config, edit line `GAPS_OUT=20` in `fakemaximize.sh` to match.
-- **Floating geometry is only saved when going through the script.** If a window was tiled before ever being fake maximized, it will be unmaximized to floating without a saved position.
-- **The plugin version is not yet available.** The script relies on temporary files in `/tmp` for state, which is cleared on reboot.
-- **Multi-monitor support** has not been thoroughly tested.
+| Window State | Action |
+|---|---|
+| Floating | Saves geometry, resizes to fill screen (minus gaps and reserved areas) |
+| Fakemaxed | Restores original geometry |
+| Tiled | Converts to floating (tiled already fills the screen) |
+
+---
+
+## Window Rules
+
+Fakemaxed windows are tagged with `hyprmax`, which can be used in window rules:
+
+```ini
+windowrule = bordercolor rgb(ff0000), tag:hyprmax
+```

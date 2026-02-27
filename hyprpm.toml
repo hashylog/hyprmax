@@ -1,0 +1,12 @@
+[repository]
+name = "hyprmax"
+authors = ["hashylog"]
+
+[hyprmax]
+description = "Fake maximize for floating WM that avoids z-order bugs"
+authors = ["hashylog"]
+output = "build/libhyprmax.so"
+build = [
+    "meson setup build --buildtype=release",
+    "ninja -C build",
+]
