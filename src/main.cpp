@@ -1,18 +1,10 @@
 #define WLR_USE_UNSTABLE
 
-#include <unistd.h>
+#include <format>
+#include <stdexcept>
+#include <string>
 
-#include <hyprland/src/includes.hpp>
-#include <sstream>
-
-#define private public
-#include <hyprland/src/Compositor.hpp>
-#include <hyprland/src/desktop/state/FocusState.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
-#include <hyprland/src/config/ConfigManager.hpp>
-#include <hyprland/src/managers/KeybindManager.hpp>
-#undef private
-
+#include "compat.hpp"
 #include "globals.hpp"
 
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
@@ -20,73 +12,50 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 }
 
 static void applyMaximize(PHLWINDOW window) {
-    const auto PMONITOR = window->m_monitor.lock();
-    if (!PMONITOR)
+    const auto targetBox = Hyprmax::Compat::maximizedBox(window);
+    if (targetBox.w <= 0 || targetBox.h <= 0)
         return;
 
-    // Work area already excludes bars, panels, etc.
-    CBox workArea = PMONITOR->logicalBoxMinusReserved();
-
-    // Read gaps_out from config (supports CSS-style: top right bottom left)
-    static auto PGAPSOUTDATA = CConfigValue<Hyprlang::CUSTOMTYPE>("general:gaps_out");
-    auto*       PGAPSOUT     = sc<CCssGapData*>((PGAPSOUTDATA.ptr())->getData());
-
-    // Apply gaps to work area
-    Desktop::CReservedArea gapsReserved{(double)PGAPSOUT->m_top, (double)PGAPSOUT->m_right, (double)PGAPSOUT->m_bottom, (double)PGAPSOUT->m_left};
-    CBox                   targetBox = gapsReserved.apply(workArea);
-
-    // Resize and move via dispatchers (proper layout path)
-    g_pKeybindManager->m_dispatchers["resizeactive"](std::format("exact {} {}", (int)targetBox.w, (int)targetBox.h));
-    g_pKeybindManager->m_dispatchers["moveactive"](std::format("exact {} {}", (int)targetBox.x, (int)targetBox.y));
-
-    // Tag window as fakemaxed
-    window->m_ruleApplicator->m_tagKeeper.applyTag("+hyprmax");
-    window->m_ruleApplicator->propertiesChanged(Desktop::Rule::RULE_PROP_TAG);
+    Hyprmax::Compat::dispatch("resizeactive", std::format("exact {} {}", static_cast<int>(targetBox.w), static_cast<int>(targetBox.h)));
+    Hyprmax::Compat::dispatch("moveactive", std::format("exact {} {}", static_cast<int>(targetBox.x), static_cast<int>(targetBox.y)));
+    Hyprmax::Compat::setWindowTag(window, "+hyprmax");
 }
 
 static SDispatchResult onHyprmax(std::string args) {
-    const auto PWINDOW = Desktop::focusState()->window();
+    (void)args;
 
-    if (!PWINDOW || !PWINDOW->m_isMapped)
+    const auto PWINDOW = Hyprmax::Compat::focusedWindow();
+
+    if (!Hyprmax::Compat::isMappedWindow(PWINDOW))
         return {.success = false, .error = "No valid window"};
 
-    // Already fakemaxed — restore original geometry
     auto it = g_windowStates.find(PWINDOW);
     if (it != g_windowStates.end()) {
         const auto saved = it->second;
         g_windowStates.erase(it);
 
-        // Restore via dispatchers (proper layout path)
-        g_pKeybindManager->m_dispatchers["resizeactive"](std::format("exact {} {}", (int)saved.size.x, (int)saved.size.y));
-        g_pKeybindManager->m_dispatchers["moveactive"](std::format("exact {} {}", (int)saved.position.x, (int)saved.position.y));
-
-        if (saved.wasTiled)
-            g_pKeybindManager->m_dispatchers["settiled"]("");
-
-        PWINDOW->m_ruleApplicator->m_tagKeeper.applyTag("-hyprmax");
-        PWINDOW->m_ruleApplicator->propertiesChanged(Desktop::Rule::RULE_PROP_TAG);
+        Hyprmax::Compat::dispatch("resizeactive", std::format("exact {} {}", static_cast<int>(saved.size.x), static_cast<int>(saved.size.y)));
+        Hyprmax::Compat::dispatch("moveactive", std::format("exact {} {}", static_cast<int>(saved.position.x), static_cast<int>(saved.position.y)));
+        Hyprmax::Compat::setWindowTag(PWINDOW, "-hyprmax");
 
         return {};
     }
 
-    // Tiled window — just convert to floating (tiled already behaves like maximized)
     if (!PWINDOW->m_isFloating) {
-        g_pKeybindManager->m_dispatchers["setfloating"]("");
+        Hyprmax::Compat::dispatch("setfloating", "");
         return {};
     }
 
-    // Floating window — save geometry and maximize
     g_windowStates[PWINDOW] = SWindowState{
-        .position = PWINDOW->m_realPosition->goal(),
-        .size     = PWINDOW->m_realSize->goal(),
-        .wasTiled = false,
+        .position = Hyprmax::Compat::windowGoalPosition(PWINDOW),
+        .size     = Hyprmax::Compat::windowGoalSize(PWINDOW),
     };
 
     applyMaximize(PWINDOW);
     return {};
 }
 
-static SP<HOOK_CALLBACK_FN> g_pCloseWindowHook;
+static Hyprmax::Compat::CloseWindowHook g_closeWindowHook;
 
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     PHANDLE = handle;
@@ -101,11 +70,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     bool success = HyprlandAPI::addDispatcherV2(PHANDLE, "hyprmax", ::onHyprmax);
 
-    // Cleanup state when windows are destroyed
-    g_pCloseWindowHook = HyprlandAPI::registerCallbackDynamic(PHANDLE, "closeWindow", [](void*, SCallbackInfo&, std::any data) {
-        auto window = std::any_cast<PHLWINDOW>(data);
+#if HYPRMAX_HAS_EVENT_BUS
+    Hyprmax::Compat::registerCloseWindowHook(g_closeWindowHook, [](PHLWINDOW window) {
         g_windowStates.erase(window);
     });
+#else
+    Hyprmax::Compat::registerCloseWindowHook(PHANDLE, g_closeWindowHook, [](PHLWINDOW window) {
+        g_windowStates.erase(window);
+    });
+#endif
 
     if (success)
         HyprlandAPI::addNotification(PHANDLE, "[hyprmax] Initialized successfully!", CHyprColor{0.2, 1.0, 0.2, 1.0}, 5000);
@@ -118,5 +91,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
+    Hyprmax::Compat::clearCloseWindowHook(g_closeWindowHook);
     g_windowStates.clear();
 }

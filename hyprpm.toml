@@ -7,6 +7,6 @@ description = "Fake maximize for floating WM that avoids z-order bugs"
 authors = ["hashylog"]
 output = "build/libhyprmax.so"
 build = [
-    "meson setup build --buildtype=release",
+    "meson setup build --buildtype=release --reconfigure",
     "ninja -C build",
 ]

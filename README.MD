@@ -15,6 +15,7 @@ When using Hyprland as a floating WM, the native `fullscreen, 1` (maximize) stat
 ## Features
 
 - Native C++ plugin — no external dependencies (no `bash`, `jq`, or shell scripts)
+- Single codebase intended to build against both Hyprland `0.53.x` and `0.54.x`
 - Fake maximize that reads `general:gaps_out` directly from your config (supports CSS-style gaps)
 - Respects reserved areas automatically (Waybar, panels, etc.)
 - Restores the original window geometry on toggle
@@ -70,7 +71,7 @@ hyprctl plugin load /absolute/path/to/hyprmax/build/libhyprmax.so
 
 ### Script (legacy)
 
-The original shell script is still available in `scripts/hyprmax.sh` but is no longer recommended. The plugin is faster, has no external dependencies, and reads your config automatically.
+The original shell script is still available in `scripts/hyprmax.sh` as a fallback for systems where the native plugin is not practical. The plugin is still the recommended path when it can be built locally.
 
 <details>
 <summary>Script installation</summary>
@@ -87,7 +88,7 @@ chmod +x ~/.config/hypr/scripts/hyprmax.sh
 bind = $mainMod, F, exec, ~/.config/hypr/scripts/hyprmax.sh
 ```
 
-**Note:** The script has `GAPS_OUT` hardcoded to `20`. Edit the script if you use a different value.
+**Note:** The script reads `general:gaps_out`, monitor reserved areas, and uses the same `hyprmax` tag as the native plugin.
 
 </details>
 
